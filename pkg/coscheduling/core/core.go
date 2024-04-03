@@ -85,6 +85,29 @@ type PodGroupManager struct {
 	sync.RWMutex
 }
 
+func AddPodFactory(pgMgr *PodGroupManager) func(obj interface{}) {
+	return func(obj interface{}) {
+		p, ok := obj.(*corev1.Pod)
+		if !ok {
+			return
+		}
+		if p.Spec.NodeName == "" {
+			return
+		}
+		pgFullName, _ := pgMgr.GetPodGroup(context.Background(), p)
+		if pgFullName == "" {
+			return
+		}
+		pgMgr.RWMutex.Lock()
+		defer pgMgr.RWMutex.Unlock()
+		if assigned, exist := pgMgr.assignedPodsByPG[pgFullName]; exist {
+			assigned.Insert(p.Name)
+		} else {
+			pgMgr.assignedPodsByPG[pgFullName] = sets.New(p.Name)
+		}
+	}
+}
+
 // NewPodGroupManager creates a new operation object.
 func NewPodGroupManager(client client.Client, snapshotSharedLister framework.SharedLister, scheduleTimeout *time.Duration, podInformer informerv1.PodInformer) *PodGroupManager {
 	pgMgr := &PodGroupManager{
@@ -97,15 +120,22 @@ func NewPodGroupManager(client client.Client, snapshotSharedLister framework.Sha
 		assignedPodsByPG:     map[string]sets.Set[string]{},
 	}
 	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: AddPodFactory(pgMgr),
 		DeleteFunc: func(obj interface{}) {
 			switch t := obj.(type) {
 			case *corev1.Pod:
 				pod := t
+				if pod.Spec.NodeName == "" {
+					return
+				}
 				pgMgr.Unreserve(context.Background(), pod)
 				return
 			case cache.DeletedFinalStateUnknown:
 				pod, ok := t.Obj.(*corev1.Pod)
 				if !ok {
+					return
+				}
+				if pod.Spec.NodeName == "" {
 					return
 				}
 				pgMgr.Unreserve(context.Background(), pod)

@@ -159,7 +159,7 @@ func (cs *Coscheduling) PostFilter(ctx context.Context, state *framework.CycleSt
 
 	// This indicates there are already enough Pods satisfying the PodGroup,
 	// so don't bother to reject the whole PodGroup.
-	assigned := cs.pgMgr.GetAssignedPodCount(pg.Name)
+	assigned := cs.pgMgr.GetAssignedPodCount(pgName)
 	if assigned >= int(pg.Spec.MinMember) {
 		klog.V(4).InfoS("Assigned pods", "podGroup", klog.KObj(pg), "assigned", assigned)
 		return &framework.PostFilterResult{}, framework.NewStatus(framework.Unschedulable)
