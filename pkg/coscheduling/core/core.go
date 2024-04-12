@@ -80,7 +80,7 @@ type PodGroupManager struct {
 	backedOffPG *gochache.Cache
 	// podLister is pod lister
 	podLister listerv1.PodLister
-	//
+	// assignedPodsByPG stores the pods assumed or bound for podgroups
 	assignedPodsByPG map[string]sets.Set[string]
 	sync.RWMutex
 }
@@ -151,10 +151,7 @@ func NewPodGroupManager(client client.Client, snapshotSharedLister framework.Sha
 func (pgMgr *PodGroupManager) GetAssignedPodCount(pgName string) int {
 	pgMgr.RWMutex.RLock()
 	defer pgMgr.RWMutex.RUnlock()
-	if assigned, exist := pgMgr.assignedPodsByPG[pgName]; exist {
-		return len(assigned)
-	}
-	return 0
+	return len(pgMgr.assignedPodsByPG[pgName])
 }
 
 func (pgMgr *PodGroupManager) BackoffPodGroup(pgName string, backoff time.Duration) {
@@ -283,7 +280,7 @@ func (pgMgr *PodGroupManager) Permit(ctx context.Context, pod *corev1.Pod) Statu
 	return Wait
 }
 
-// Unreserve removes assigned pod from asssigned pod map from PodGroupInfo when schedule or bind failed.
+// Unreserve invalidates assigned pod from assignedPodsByPG when schedule or bind failed.
 func (pgMgr *PodGroupManager) Unreserve(ctx context.Context, pod *corev1.Pod) {
 	pgFullName, _ := pgMgr.GetPodGroup(ctx, pod)
 	if pgFullName == "" {
